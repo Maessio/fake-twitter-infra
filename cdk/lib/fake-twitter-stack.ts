@@ -66,8 +66,12 @@ export class FakeTwitterStack extends Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'backend' }),
       environment: {
         DATABASE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`
-      }
+      },
+      portMappings: [
+        { containerPort: 8080 }
+      ]
     });
+    
 
     // Fargate Service with Load Balancer
     const service = new ecs.FargateService(this, 'BackendService', {
