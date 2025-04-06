@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm install
         working-directory: ./cdk
+      
+      - name: Bootstrap CDK
+        run: cdk bootstrap aws://916661254529/us-east-1
+        working-directory: ./cdk
 
       - name: Deploy with CDK
         run: cdk deploy --require-approval never
