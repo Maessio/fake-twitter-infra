@@ -36,7 +36,7 @@ export class FakeTwitterStack extends Stack {
 
     // Frontend deploy (opcional, útil para testes locais)
     new s3deploy.BucketDeployment(this, 'DeployFrontend', {
-      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist')],
+      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist/fake-twitter-frontend/browser')],
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ['/*']
