@@ -34,14 +34,6 @@ export class FakeTwitterStack extends Stack {
       }
     });
 
-    // Frontend deploy (opcional, útil para testes locais)
-    new s3deploy.BucketDeployment(this, 'DeployFrontend', {
-      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist/fake-twitter-frontend')],
-      destinationBucket: siteBucket,
-      distribution,
-      distributionPaths: ['/*']
-    });
-
     // RDS PostgreSQL
     const db = new rds.DatabaseInstance(this, 'PostgresInstance', {
       engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.VER_15 }),
