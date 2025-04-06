@@ -1,16 +1,15 @@
 // cdk/lib/fake-twitter-stack.ts
-import { Stack, StackProps, RemovalPolicy  } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as rds from 'aws-cdk-lib/aws-rds';
-import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 
 export class FakeTwitterStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -67,32 +66,16 @@ export class FakeTwitterStack extends Stack {
       environment: {
         DATABASE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`
       },
-      portMappings: [
-        { containerPort: 8080 }
-      ]
+      portMappings: [{ containerPort: 8080 }]
     });
-    
 
     // Fargate Service with Load Balancer
-    const service = new ecs.FargateService(this, 'BackendService', {
+    const backendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'BackendService', {
       cluster,
       taskDefinition: taskDef,
-      desiredCount: 2
-    });
-
-    const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {
-      vpc,
-      internetFacing: true
-    });
-
-    const listener = lb.addListener('Listener', {
-      port: 80,
-      open: true
-    });
-
-    listener.addTargets('ECS', {
-      port: 80,
-      targets: [service]
+      desiredCount: 2,
+      publicLoadBalancer: true,
+      listenerPort: 80
     });
 
     // Output useful URLs
@@ -101,7 +84,7 @@ export class FakeTwitterStack extends Stack {
     });
 
     new cdk.CfnOutput(this, 'BackendURL', {
-      value: lb.loadBalancerDnsName
+      value: backendService.loadBalancer.loadBalancerDnsName
     });
   }
 }
