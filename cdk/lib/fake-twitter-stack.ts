@@ -4,6 +4,7 @@ import { Construct } from 'constructs';
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -27,15 +28,10 @@ export class FakeTwitterStack extends Stack {
     });
 
     // CloudFront Distribution
-    const distribution = new cloudfront.CloudFrontWebDistribution(this, 'FrontendDistribution', {
-      originConfigs: [
-        {
-          s3OriginSource: {
-            s3BucketSource: siteBucket
-          },
-          behaviors: [{ isDefaultBehavior: true }]
-        }
-      ]
+    const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
+      defaultBehavior: {
+        origin: new origins.S3StaticWebsiteOrigin(siteBucket)
+      }
     });
 
     // Frontend deploy (opcional, útil para testes locais)
