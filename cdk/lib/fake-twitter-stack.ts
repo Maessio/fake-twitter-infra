@@ -1,8 +1,8 @@
-// cdk/lib/fake-twitter-stack.ts
 import { Stack, StackProps, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
@@ -10,7 +10,6 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
-import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class FakeTwitterStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -19,68 +18,37 @@ export class FakeTwitterStack extends Stack {
     // VPC
     const vpc = new ec2.Vpc(this, 'FakeTwitterVpc', { maxAzs: 2 });
 
-    // S3 Bucket for frontend
+    // S3 Bucket para frontend
     const siteBucket = new s3.Bucket(this, 'FrontendBucket', {
-      bucketName: "fake-twitter-frontend",
+      bucketName: 'fake-twitter-frontend',
       websiteIndexDocument: 'index.html',
       publicReadAccess: false,
       removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true
+      autoDeleteObjects: true,
     });
 
-    // Origin Access Control for CloudFront
-    const oac = new cloudfront.CfnOriginAccessControl(this, 'FakeTwitterOAC', {
-      originAccessControlConfig: {
-        name: 'FakeTwitterOAC',
-        originAccessControlOriginType: 's3',
-        signingBehavior: 'always',
-        signingProtocol: 'sigv4',
-        description: 'OAC for CloudFront to access S3'
-      }
+    // CloudFront Distribution
+    const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
+      defaultRootObject: 'index.html',
+      defaultBehavior: {
+        origin: new origins.S3Origin(siteBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
     });
 
-    // CloudFront Distribution with OAC
-    const distribution = new cloudfront.CfnDistribution(this, 'FrontendDistribution', {
-      distributionConfig: {
-        enabled: true,
-        defaultRootObject: 'index.html',
-        origins: [
-          {
-            id: 'FakeTwitterOrigin',
-            domainName: siteBucket.bucketRegionalDomainName,
-            originAccessControlId: oac.attrId,
-            s3OriginConfig: { originAccessIdentity: '' }
-          }
-        ],
-        defaultCacheBehavior: {
-          targetOriginId: 'FakeTwitterOrigin',
-          viewerProtocolPolicy: 'redirect-to-https',
-          allowedMethods: ['GET', 'HEAD'],
-          cachedMethods: ['GET', 'HEAD'],
-          compress: true,
-          forwardedValues: {
-            queryString: false,
-            cookies: { forward: 'none' }
-          }
-        }
-      }
+    // Deploy do frontend
+    new s3deploy.BucketDeployment(this, 'DeployFrontend', {
+      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist')],
+      destinationBucket: siteBucket,
+      distribution,
+      distributionPaths: ['/*'],
     });
-
-    // Grant CloudFront access to the bucket
-    siteBucket.addToResourcePolicy(new iam.PolicyStatement({
-      actions: ['s3:GetObject'],
-      resources: [siteBucket.arnForObjects('*')],
-      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
-      conditions: {
-        StringEquals: {
-          'AWS:PrincipalArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.ref}`
-        }
-      }
-    }));
 
     // RDS PostgreSQL
     const db = new rds.DatabaseInstance(this, 'PostgresInstance', {
-      engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.VER_15 }),
+      engine: rds.DatabaseInstanceEngine.postgres({
+        version: rds.PostgresEngineVersion.VER_15,
+      }),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       publiclyAccessible: false,
@@ -91,7 +59,7 @@ export class FakeTwitterStack extends Stack {
       maxAllocatedStorage: 100,
       databaseName: 'fake_twitter_db',
       removalPolicy: RemovalPolicy.DESTROY,
-      deletionProtection: false
+      deletionProtection: false,
     });
 
     const dbSecret = db.secret!;
@@ -102,11 +70,12 @@ export class FakeTwitterStack extends Stack {
     // Task Definition
     const taskDef = new ecs.FargateTaskDefinition(this, 'BackendTaskDef', {
       memoryLimitMiB: 512,
-      cpu: 256
+      cpu: 256,
     });
 
+    // ECR Repo
     const backendRepo = new ecr.Repository(this, 'BackendRepo', {
-      repositoryName: 'fake-twitter-backend'
+      repositoryName: 'fake-twitter-backend',
     });
 
     const container = taskDef.addContainer('BackendContainer', {
@@ -114,42 +83,52 @@ export class FakeTwitterStack extends Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'backend' }),
       environment: {
         SPRING_DATASOURCE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`,
-        JWT_SECRET: 'my-secret-key'
+        JWT_SECRET: 'my-secret-key',
       },
       secrets: {
         SPRING_DATASOURCE_USERNAME: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
-        SPRING_DATASOURCE_PASSWORD: ecs.Secret.fromSecretsManager(dbSecret, 'password')
+        SPRING_DATASOURCE_PASSWORD: ecs.Secret.fromSecretsManager(dbSecret, 'password'),
       },
-      portMappings: [{ containerPort: 8080 }]
+      portMappings: [{ containerPort: 8080 }],
     });
 
-    // Fargate Service with Load Balancer
-    const backendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'BackendService', {
-      cluster,
-      taskDefinition: taskDef,
-      desiredCount: 2,
-      publicLoadBalancer: true,
-      listenerPort: 80
-    });
+        // Fargate Service with Load Balancer
+        const backendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'BackendService', {
+          cluster,
+          taskDefinition: taskDef,
+          desiredCount: 2,
+          publicLoadBalancer: true,
+          listenerPort: 80
+        });
+    
+        // health check with load balancer
+        backendService.targetGroup.configureHealthCheck({
+          path: '/health', // Certifique-se de que este endpoint exista no backend
+          healthyHttpCodes: '200',
+          interval: cdk.Duration.seconds(30),
+          timeout: cdk.Duration.seconds(5),
+          healthyThresholdCount: 2,
+          unhealthyThresholdCount: 3
+        });
+    
+        // Security Group
+        const dbSecurityGroup = db.connections.securityGroups[0];
+        const backendSecurityGroup = backendService.service.connections.securityGroups[0];
+    
+        dbSecurityGroup.addIngressRule(
+          backendSecurityGroup,
+          ec2.Port.tcp(5432),
+          'Allow ECS backend to access RDS PostgreSQL'
+        );
+    
 
-    // Security Group
-    const dbSecurityGroup = db.connections.securityGroups[0];
-    const backendSecurityGroup = backendService.service.connections.securityGroups[0];
-
-    dbSecurityGroup.addIngressRule(
-      backendSecurityGroup,
-      ec2.Port.tcp(5432),
-      'Allow ECS backend to access RDS PostgreSQL'
-    );
-
-
-    // Output useful URLs
+    // Outputs
     new cdk.CfnOutput(this, 'FrontendURL', {
-      value: distribution.attrDomainName
+      value: distribution.domainName,
     });
 
     new cdk.CfnOutput(this, 'BackendURL', {
-      value: backendService.loadBalancer.loadBalancerDnsName
+      value: backendService.loadBalancer.loadBalancerDnsName,
     });
   }
 }
