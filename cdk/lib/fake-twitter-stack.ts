@@ -38,7 +38,7 @@ export class FakeTwitterStack extends Stack {
 
     // Deploy do frontend
     new s3deploy.BucketDeployment(this, 'DeployFrontend', {
-      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist')],
+      sources: [s3deploy.Source.asset('../fake-twitter-frontend/dist/browser')],
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ['/*'],
@@ -92,34 +92,34 @@ export class FakeTwitterStack extends Stack {
       portMappings: [{ containerPort: 8080 }],
     });
 
-        // Fargate Service with Load Balancer
-        const backendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'BackendService', {
-          cluster,
-          taskDefinition: taskDef,
-          desiredCount: 2,
-          publicLoadBalancer: true,
-          listenerPort: 80
-        });
-    
-        // health check with load balancer
-        backendService.targetGroup.configureHealthCheck({
-          path: '/health', // Certifique-se de que este endpoint exista no backend
-          healthyHttpCodes: '200',
-          interval: cdk.Duration.seconds(30),
-          timeout: cdk.Duration.seconds(5),
-          healthyThresholdCount: 2,
-          unhealthyThresholdCount: 3
-        });
-    
-        // Security Group
-        const dbSecurityGroup = db.connections.securityGroups[0];
-        const backendSecurityGroup = backendService.service.connections.securityGroups[0];
-    
-        dbSecurityGroup.addIngressRule(
-          backendSecurityGroup,
-          ec2.Port.tcp(5432),
-          'Allow ECS backend to access RDS PostgreSQL'
-        );
+    // Fargate Service with Load Balancer
+    const backendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'BackendService', {
+      cluster,
+      taskDefinition: taskDef,
+      desiredCount: 2,
+      publicLoadBalancer: true,
+      listenerPort: 80
+    });
+
+    // health check with load balancer
+    backendService.targetGroup.configureHealthCheck({
+      path: '/health',
+      healthyHttpCodes: '200',
+      interval: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(5),
+      healthyThresholdCount: 2,
+      unhealthyThresholdCount: 3
+    });
+
+    // Security Group
+    const dbSecurityGroup = db.connections.securityGroups[0];
+    const backendSecurityGroup = backendService.service.connections.securityGroups[0];
+
+    dbSecurityGroup.addIngressRule(
+      backendSecurityGroup,
+      ec2.Port.tcp(5432),
+      'Allow ECS backend to access RDS PostgreSQL'
+    );
     
 
     // Outputs
