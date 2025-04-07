@@ -10,6 +10,7 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class FakeTwitterStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -27,12 +28,55 @@ export class FakeTwitterStack extends Stack {
       autoDeleteObjects: true
     });
 
-    // CloudFront Distribution
-    const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
-      defaultBehavior: {
-        origin: new origins.S3StaticWebsiteOrigin(siteBucket)
+    // Origin Access Control for CloudFront
+    const oac = new cloudfront.CfnOriginAccessControl(this, 'FakeTwitterOAC', {
+      originAccessControlConfig: {
+        name: 'FakeTwitterOAC',
+        originAccessControlOriginType: 's3',
+        signingBehavior: 'always',
+        signingProtocol: 'sigv4',
+        description: 'OAC for CloudFront to access S3'
       }
     });
+
+    // CloudFront Distribution with OAC
+    const distribution = new cloudfront.CfnDistribution(this, 'FrontendDistribution', {
+      distributionConfig: {
+        enabled: true,
+        defaultRootObject: 'index.html',
+        origins: [
+          {
+            id: 'FakeTwitterOrigin',
+            domainName: siteBucket.bucketRegionalDomainName,
+            originAccessControlId: oac.attrId,
+            s3OriginConfig: { originAccessIdentity: '' }
+          }
+        ],
+        defaultCacheBehavior: {
+          targetOriginId: 'FakeTwitterOrigin',
+          viewerProtocolPolicy: 'redirect-to-https',
+          allowedMethods: ['GET', 'HEAD'],
+          cachedMethods: ['GET', 'HEAD'],
+          compress: true,
+          forwardedValues: {
+            queryString: false,
+            cookies: { forward: 'none' }
+          }
+        }
+      }
+    });
+
+    // Grant CloudFront access to the bucket
+    siteBucket.addToResourcePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject'],
+      resources: [siteBucket.arnForObjects('*')],
+      principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
+      conditions: {
+        StringEquals: {
+          'AWS:SourceArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.ref}`
+        }
+      }
+    }));
 
     // RDS PostgreSQL
     const db = new rds.DatabaseInstance(this, 'PostgresInstance', {
@@ -50,7 +94,7 @@ export class FakeTwitterStack extends Stack {
       deletionProtection: false
     });
 
-    const dbSecret = db.secret!; // Segredo gerado automaticamente com username e password
+    const dbSecret = db.secret!;
 
     // ECS Cluster
     const cluster = new ecs.Cluster(this, 'FakeTwitterCluster', { vpc });
@@ -90,7 +134,7 @@ export class FakeTwitterStack extends Stack {
 
     // Output useful URLs
     new cdk.CfnOutput(this, 'FrontendURL', {
-      value: distribution.distributionDomainName
+      value: distribution.attrDomainName
     });
 
     new cdk.CfnOutput(this, 'BackendURL', {
