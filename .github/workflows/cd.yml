@@ -31,5 +31,5 @@ jobs:
         working-directory: ./cdk
 
       - name: Deploy with CDK
-        run: cdk deploy --require-approval never
+        run: cdk deploy --require-approval never --verbose
         working-directory: ./cdk
