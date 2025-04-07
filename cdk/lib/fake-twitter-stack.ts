@@ -50,7 +50,7 @@ export class FakeTwitterStack extends Stack {
       resources: [
         siteBucket.arnForObjects('*')
       ],
-      principals: [new cdk.aws_iam.ArnPrincipal(`arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${oai.originAccessIdentityId}`)],
+      principals: [new cdk.aws_iam.ArnPrincipal(`arn:aws:cloudfront::916661254529:distribution/E1G8SP64YO7BPZ`)],
     }));
 
     // RDS PostgreSQL
