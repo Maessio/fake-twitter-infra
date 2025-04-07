@@ -57,11 +57,14 @@ export class FakeTwitterStack extends Stack {
       memoryLimitMiB: 512,
       cpu: 256
     });
-
+    
+    const backendRepo = new ecr.Repository(this, 'BackendRepo', {
+      repositoryName: 'fake-twitter-backend'
+    });
+    
+    // Container usa esse repositório
     taskDef.addContainer('BackendContainer', {
-      image: ecs.ContainerImage.fromEcrRepository(
-        ecr.Repository.fromRepositoryName(this, 'BackendRepo', 'fake-twitter-backend')
-      ),
+      image: ecs.ContainerImage.fromEcrRepository(backendRepo),
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'backend' }),
       environment: {
         DATABASE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`
