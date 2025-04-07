@@ -18,7 +18,7 @@ export class FakeTwitterStack extends Stack {
     // VPC
     const vpc = new ec2.Vpc(this, 'FakeTwitterVpc', { maxAzs: 2 });
 
-    // S3 Bucket para frontend
+    // S3 Bucket for frontend
     const siteBucket = new s3.Bucket(this, 'FrontendBucket', {
       bucketName: 'fake-twitter-frontend',
       websiteIndexDocument: 'index.html',
@@ -27,11 +27,17 @@ export class FakeTwitterStack extends Stack {
       autoDeleteObjects: true,
     });
 
-    // CloudFront Distribution
+    const oai = new cloudfront.OriginAccessIdentity(this, 'OAI');
+
+    siteBucket.grantRead(oai);
+
+    // CloudFront with OAI 
     const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
       defaultBehavior: {
-        origin: new origins.S3Origin(siteBucket),
+        origin: new origins.S3Origin(siteBucket, {
+          originAccessIdentity: oai,
+        }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
     });
