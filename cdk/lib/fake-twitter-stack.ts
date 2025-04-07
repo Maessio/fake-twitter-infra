@@ -20,6 +20,7 @@ export class FakeTwitterStack extends Stack {
 
     // S3 Bucket for frontend
     const siteBucket = new s3.Bucket(this, 'FrontendBucket', {
+      bucketName: "fake-twitter-frontend",
       websiteIndexDocument: 'index.html',
       publicReadAccess: false,
       removalPolicy: RemovalPolicy.DESTROY,
