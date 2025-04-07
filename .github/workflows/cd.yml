@@ -22,14 +22,6 @@ jobs:
       - name: Install CDK
         run: npm install -g aws-cdk
 
-      - name: Install frontend dependencies
-        run: npm install
-        working-directory: ./fake-twitter-frontend
-
-      - name: Build Angular frontend
-        run: npm run build -- --output-path=dist/browser
-        working-directory: ./fake-twitter-frontend
-
       - name: Install CDK dependencies
         run: npm install
         working-directory: ./cdk
