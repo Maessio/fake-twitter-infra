@@ -2,13 +2,12 @@ import { Stack, StackProps, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';  
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 
 export class FakeTwitterStack extends Stack {
@@ -27,30 +26,29 @@ export class FakeTwitterStack extends Stack {
       autoDeleteObjects: true,
     });
 
-    // Create CloudFront Origin Access Identity (OAI)
-    const oai = new cloudfront.OriginAccessIdentity(this, 'OAI');
+    // Create CloudFront S3 Origin Access Control (OAC)
+    const oac = new cloudfront.S3OriginAccessControl(this, 'S3OriginAccessControl', {
+      originAccessControlName: 'fake-twitter-oac',
+    });
 
-    // Grant CloudFront access to the S3 bucket
-    siteBucket.grantRead(oai);
-
-    // CloudFront Distribution
+    // CloudFront Distribution with S3OriginAccessControl
     const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
       defaultBehavior: {
-        origin: new origins.S3Origin(siteBucket, {
-          originAccessIdentity: oai,
+        origin: new origins.S3Origin(siteBucket, { 
+          originAccessControlId: oac.originAccessControlId,
         }),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.ALLOW_ALL,
       },
     });
 
-    // Update the bucket policy to allow CloudFront access using the OAI ID
+    // Update the bucket policy to allow CloudFront access with the OAC
     siteBucket.addToResourcePolicy(new cdk.aws_iam.PolicyStatement({
       actions: ['s3:GetObject'],
       resources: [
         siteBucket.arnForObjects('*')
       ],
-      principals: [new cdk.aws_iam.ArnPrincipal(`arn:aws:cloudfront::916661254529:distribution/E1G8SP64YO7BPZ`)],
+      principals: [new cdk.aws_iam.ArnPrincipal(`arn:aws:cloudfront::${cdk.Aws.ACCOUNT_ID}:distribution/${distribution.distributionId}`)],
     }));
 
     // RDS PostgreSQL
@@ -110,7 +108,7 @@ export class FakeTwitterStack extends Stack {
       listenerPort: 80
     });
 
-    // health check with load balancer
+    // Health check with load balancer
     backendService.targetGroup.configureHealthCheck({
       path: '/health',
       healthyHttpCodes: '200',
@@ -129,7 +127,6 @@ export class FakeTwitterStack extends Stack {
       ec2.Port.tcp(5432),
       'Allow ECS backend to access RDS PostgreSQL'
     );
-    
 
     // Outputs
     new cdk.CfnOutput(this, 'FrontendURL', {
