@@ -73,7 +73,7 @@ export class FakeTwitterStack extends Stack {
       principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
       conditions: {
         StringEquals: {
-          'AWS:SourceArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.ref}`
+          'AWS:PrincipalArn': `arn:aws:cloudfront::${this.account}:distribution/${distribution.ref}`
         }
       }
     }));
@@ -131,6 +131,17 @@ export class FakeTwitterStack extends Stack {
       publicLoadBalancer: true,
       listenerPort: 80
     });
+
+    // Security Group
+    const dbSecurityGroup = db.connections.securityGroups[0];
+    const backendSecurityGroup = backendService.service.connections.securityGroups[0];
+
+    dbSecurityGroup.addIngressRule(
+      backendSecurityGroup,
+      ec2.Port.tcp(5432),
+      'Allow ECS backend to access RDS PostgreSQL'
+    );
+
 
     // Output useful URLs
     new cdk.CfnOutput(this, 'FrontendURL', {
