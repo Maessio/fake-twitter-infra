@@ -4,6 +4,6 @@ import { FakeTwitterStack } from '../lib/fake-twitter-stack';
 
 const app = new cdk.App();
 
-new FakeTwitterStack(app, 'NewFakeTwitterStack', {
+new FakeTwitterStack(app, 'FakeTwitterStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
 });
