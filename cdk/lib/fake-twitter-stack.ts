@@ -27,11 +27,13 @@ export class FakeTwitterStack extends Stack {
       autoDeleteObjects: true,
     });
 
+    // Create CloudFront Origin Access Identity (OAI)
     const oai = new cloudfront.OriginAccessIdentity(this, 'OAI');
 
+    // Grant CloudFront access to the S3 bucket
     siteBucket.grantRead(oai);
 
-    // CloudFront with OAI 
+    // CloudFront Distribution
     const distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
       defaultBehavior: {
@@ -41,6 +43,15 @@ export class FakeTwitterStack extends Stack {
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
     });
+
+    // Update the bucket policy to allow CloudFront access using the OAI ID
+    siteBucket.addToResourcePolicy(new cdk.aws_iam.PolicyStatement({
+      actions: ['s3:GetObject'],
+      resources: [
+        siteBucket.arnForObjects('*')
+      ],
+      principals: [new cdk.aws_iam.ArnPrincipal(`arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${oai.originAccessIdentityId}`)],
+    }));
 
     // RDS PostgreSQL
     const db = new rds.DatabaseInstance(this, 'PostgresInstance', {
