@@ -50,6 +50,8 @@ export class FakeTwitterStack extends Stack {
       deletionProtection: false
     });
 
+    const dbSecret = db.secret!; // Segredo gerado automaticamente com username e password
+
     // ECS Cluster
     const cluster = new ecs.Cluster(this, 'FakeTwitterCluster', { vpc });
 
@@ -62,13 +64,17 @@ export class FakeTwitterStack extends Stack {
     const backendRepo = new ecr.Repository(this, 'BackendRepo', {
       repositoryName: 'fake-twitter-backend'
     });
-    
-    taskDef.addContainer('BackendContainer', {
+
+    const container = taskDef.addContainer('BackendContainer', {
       image: ecs.ContainerImage.fromEcrRepository(backendRepo),
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'backend' }),
       environment: {
-        DATABASE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`,
+        SPRING_DATASOURCE_URL: `jdbc:postgresql://${db.dbInstanceEndpointAddress}:5432/fake_twitter_db`,
         JWT_SECRET: 'my-secret-key'
+      },
+      secrets: {
+        SPRING_DATASOURCE_USERNAME: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
+        SPRING_DATASOURCE_PASSWORD: ecs.Secret.fromSecretsManager(dbSecret, 'password')
       },
       portMappings: [{ containerPort: 8080 }]
     });
